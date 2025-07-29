@@ -1,6 +1,6 @@
 # ESP-IDF build directory
 build/
-
+Kconfig.projbuild
 # ESP-IDF configuration files
 sdkconfig
 sdkconfig.old
@@ -34,6 +34,9 @@ Thumbs.db
 # Backup files
 *.bak
 *.backup
+
+# Lock files
+*.lock
 
 # Compiled files
 *.o
