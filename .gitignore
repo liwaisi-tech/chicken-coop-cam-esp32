@@ -1,0 +1,61 @@
+# ESP-IDF build directory
+build/
+
+# ESP-IDF configuration files
+sdkconfig
+sdkconfig.old
+
+# ESP-IDF generated files
+managed_components/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+*.bak
+*.backup
+
+# Compiled files
+*.o
+*.obj
+*.elf
+*.bin
+*.map
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Node modules (if any)
+node_modules/
+
+# Environment files
+.env
+.env.local
+
+# ESP-IDF specific
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+compile_commands.json 
