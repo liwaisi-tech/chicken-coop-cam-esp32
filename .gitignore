@@ -4,7 +4,7 @@ build/
 # ESP-IDF configuration files
 sdkconfig
 sdkconfig.old
-
+*.cmake
 # ESP-IDF generated files
 managed_components/
 
