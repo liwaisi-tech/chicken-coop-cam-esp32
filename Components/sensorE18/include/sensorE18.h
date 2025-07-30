@@ -1,18 +1,32 @@
+// sensorE18.h - Header para gestión del sensor E18-D80NK
 #ifndef SENSOR_E18_H
 #define SENSOR_E18_H
 
 #include "driver/gpio.h"
-#include "esp_log.h"
+#include "esp_err.h"
+#include <stdint.h>
+#include <stdbool.h>
 
-// Estructura con valores por defecto para la configuración del sensor
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Estructura de configuración del sensor
 typedef struct {
-    gpio_num_t pin;                    // Pin GPIO (por defecto GPIO_NUM_15)
-    gpio_pullup_t pull_up_en;         // Pull-up habilitado por defecto
-    gpio_pulldown_t pull_down_en;     // Pull-down deshabilitado por defecto
-    gpio_int_type_t intr_type;        // Interrupción en flanco descendente por defecto
+    gpio_num_t pin;                    // Pin GPIO
+    gpio_pullup_t pull_up_en;         // Pull-up habilitado
+    gpio_pulldown_t pull_down_en;     // Pull-down deshabilitado
+    gpio_int_type_t intr_type;        // Tipo de interrupción
 } sensor_e18_config_t;
 
-// Valores por defecto para la configuración
+// Estructura de estadísticas del sensor
+typedef struct {
+    uint32_t detection_count;         // Contador de detecciones
+    bool object_detected;             // Estado actual (objeto detectado)
+    int64_t last_detection_time;      // Tiempo de última detección (microsegundos)
+} sensor_statistics_t;
+
+// Configuración por defecto
 #define SENSOR_E18_DEFAULT_CONFIG { \
     .pin = GPIO_NUM_13, \
     .pull_up_en = GPIO_PULLUP_ENABLE, \
@@ -20,10 +34,51 @@ typedef struct {
     .intr_type = GPIO_INTR_ANYEDGE \
 }
 
-// Declaración de la función de inicialización
-void init_sensor(void);
+/**
+ * @brief Inicializar sensor con configuración por defecto
+ * @return ESP_OK si exitoso
+ */
+esp_err_t sensor_e18_init(void);
 
-// Función para inicializar con configuración personalizada
-void init_sensor_with_config(const sensor_e18_config_t *config);
+/**
+ * @brief Inicializar sensor con configuración personalizada
+ * @param config Configuración del sensor
+ * @return ESP_OK si exitoso
+ */
+esp_err_t sensor_e18_init_with_config(const sensor_e18_config_t *config);
+
+/**
+ * @brief Iniciar la tarea de detección
+ * @return ESP_OK si exitoso
+ */
+esp_err_t sensor_e18_start_detection_task(void);
+
+/**
+ * @brief Obtener estadísticas actuales del sensor
+ * @return Estructura con estadísticas
+ */
+sensor_statistics_t sensor_e18_get_statistics(void);
+
+/**
+ * @brief Leer estado actual del sensor (sin interrupción)
+ * @return 1 si objeto detectado, 0 si no
+ */
+int sensor_e18_read_state(void);
+
+/**
+ * @brief Obtener configuración actual del sensor
+ * @return Estructura de configuración
+ */
+sensor_e18_config_t sensor_e18_get_config(void);
+
+/**
+ * @brief Desinicializar el sensor y liberar recursos
+ * @return ESP_OK si exitoso
+ */
+esp_err_t sensor_e18_deinit(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // SENSOR_E18_H
