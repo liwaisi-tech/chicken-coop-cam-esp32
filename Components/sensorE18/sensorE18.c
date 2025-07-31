@@ -20,6 +20,7 @@ static QueueHandle_t server_queue = NULL;
 static sensor_e18_config_t current_config = SENSOR_E18_DEFAULT_CONFIG;
 static sensor_statistics_t sensor_stats = {0};
 static esp_timer_handle_t periodic_photo_timer = NULL;
+static int simulated_pin_state = 1; // Variable para simular estado del pin (1=sin objeto, 0=objeto)
 
 // Prototipos de funciones privadas
 static esp_err_t send_server_event(server_event_type_t type, const char* reason);
@@ -28,6 +29,11 @@ static esp_err_t send_server_event(server_event_type_t type, const char* reason)
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
     uint32_t gpio_num = (uint32_t) arg;
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    
+    // Contador de interrupciones (solo incrementar, no logs en ISR)
+    static uint32_t isr_count = 0;
+    isr_count++;
+    
     xQueueSendFromISR(sensor_event_queue, &gpio_num, &xHigherPriorityTaskWoken);
     
     if (xHigherPriorityTaskWoken) {
@@ -37,10 +43,11 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 
 // Callback del timer para fotos periódicas
 static void periodic_photo_callback(void* arg) {
-    // Solo tomar foto si el objeto sigue detectado
-    int sensor_state = gpio_get_level(current_config.pin);
+    // Solo tomar foto si el objeto sigue detectado (usar estado simulado)
+    int sensor_state = simulated_pin_state;
     
-    if (sensor_state == 1 && sensor_stats.object_detected) {
+    // Lógica corregida: 0 = objeto detectado
+    if (sensor_state == 0 && sensor_stats.object_detected) {
         ESP_LOGI(TAG, "📸 Foto periódica - objeto permanece presente");
         camera_manager_take_photo("objeto permanece presente");
         
@@ -99,19 +106,24 @@ esp_err_t sensor_e18_set_server_queue(QueueHandle_t queue) {
 static void sensor_detection_task(void *pvParameter) {
     uint32_t io_num;
     
-    ESP_LOGI(TAG, "Tarea de detección iniciada");
+    ESP_LOGI(TAG, "🔥 Tarea de detección iniciada - Esperando eventos...");
     
     while(1) {
         if(xQueueReceive(sensor_event_queue, &io_num, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "Evento recibido en GPIO %" PRIu32, io_num);
+            ESP_LOGI(TAG, "🚨 EVENTO RECIBIDO en GPIO %" PRIu32, io_num);
             
             // Debouncing
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME_MS));
             
-            int sensor_state = gpio_get_level(current_config.pin);
-            ESP_LOGI(TAG, "Estado del sensor: %d", sensor_state);
+            // Usar estado simulado en lugar del GPIO real para pruebas
+            int sensor_state = simulated_pin_state;
+            int gpio_raw = gpio_get_level(current_config.pin);
             
-            if (sensor_state == 1) {
+            ESP_LOGI(TAG, "📡 Estado GPIO real: %d | Estado simulado: %d (0=objeto, 1=sin objeto)", 
+                     gpio_raw, sensor_state);
+            
+            // Lógica corregida: 0 = objeto detectado, 1 = sin objeto
+            if (sensor_state == 0) {
                 // OBJETO DETECTADO
                 if (!sensor_stats.object_detected) {
                     // Primera detección
@@ -144,7 +156,7 @@ static void sensor_detection_task(void *pvParameter) {
                 }
                 
             } else {
-                // OBJETO NO DETECTADO
+                // OBJETO NO DETECTADO (sensor_state == 1)
                 if (sensor_stats.object_detected) {
                     sensor_stats.object_detected = false;
                     ESP_LOGI(TAG, "❌ Objeto retirado - Total: %" PRIu32, sensor_stats.detection_count);
@@ -177,7 +189,7 @@ esp_err_t sensor_e18_init_with_config(const sensor_e18_config_t *config) {
     // Copiar configuración
     current_config = *config;
     
-    ESP_LOGI(TAG, "Inicializando en GPIO %d", current_config.pin);
+    ESP_LOGI(TAG, "Inicializando sensor E18-D80NK en GPIO %d", current_config.pin);
     
     // Crear cola de eventos
     if (sensor_event_queue == NULL) {
@@ -210,7 +222,16 @@ esp_err_t sensor_e18_init_with_config(const sensor_e18_config_t *config) {
     // Registrar handler de interrupción
     ESP_ERROR_CHECK(gpio_isr_handler_add(current_config.pin, gpio_isr_handler, (void*) current_config.pin));
     
-    ESP_LOGI(TAG, "Sensor inicializado correctamente");
+    // Test inicial del sensor con debug extendido
+    int initial_state = gpio_get_level(current_config.pin);
+    ESP_LOGI(TAG, "🔍 DIAGNÓSTICO INICIAL DEL SENSOR E18-D80NK:");
+    ESP_LOGI(TAG, "   - Pin GPIO: %d", current_config.pin);
+    ESP_LOGI(TAG, "   - Estado raw del pin: %d", initial_state);
+    ESP_LOGI(TAG, "   - Pull-up: %s", current_config.pull_up_en ? "HABILITADO" : "DESHABILITADO");
+    ESP_LOGI(TAG, "   - Interpretación: %s", initial_state == 0 ? "OBJETO DETECTADO" : "SIN OBJETO");
+    ESP_LOGI(TAG, "🔍 ===================================");
+    
+    ESP_LOGI(TAG, "Sensor E18-D80NK inicializado correctamente en GPIO %d", current_config.pin);
     return ESP_OK;
 }
 
@@ -238,7 +259,8 @@ sensor_statistics_t sensor_e18_get_statistics(void) {
 }
 
 int sensor_e18_read_state(void) {
-    return gpio_get_level(current_config.pin);
+    // Devolver estado simulado para pruebas
+    return simulated_pin_state;
 }
 
 sensor_e18_config_t sensor_e18_get_config(void) {
@@ -268,5 +290,52 @@ esp_err_t sensor_e18_deinit(void) {
     memset(&sensor_stats, 0, sizeof(sensor_stats));
     
     ESP_LOGI(TAG, "Sensor desinicializado");
+    return ESP_OK;
+}
+
+esp_err_t sensor_e18_test(void) {
+    ESP_LOGI(TAG, "=== TEST DEL SENSOR E18-D80NK ===");
+    ESP_LOGI(TAG, "Pin configurado: GPIO %d", current_config.pin);
+    
+    // Leer estado actual
+    int current_state = gpio_get_level(current_config.pin);
+    ESP_LOGI(TAG, "Estado actual del sensor: %d", current_state);
+    ESP_LOGI(TAG, "Interpretación: %s", current_state == 0 ? "OBJETO DETECTADO" : "SIN OBJETO");
+    
+    // Mostrar estadísticas
+    ESP_LOGI(TAG, "Estadísticas actuales:");
+    ESP_LOGI(TAG, "  - Detecciones totales: %lu", sensor_stats.detection_count);
+    ESP_LOGI(TAG, "  - Objeto detectado: %s", sensor_stats.object_detected ? "SÍ" : "NO");
+    
+    // Test de interrupción
+    ESP_LOGI(TAG, "Cola de eventos: %s", sensor_event_queue ? "Creada" : "No creada");
+    
+    ESP_LOGI(TAG, "=== FIN DEL TEST ===");
+    return ESP_OK;
+}
+
+esp_err_t sensor_e18_simulate_detection(bool simulate_detection) {
+    if (sensor_event_queue == NULL) {
+        ESP_LOGE(TAG, "Cola de eventos no inicializada");
+        return ESP_ERR_INVALID_STATE;
+    }
+    
+    // Cambiar el estado simulado
+    simulated_pin_state = simulate_detection ? 0 : 1;  // 0=objeto detectado, 1=sin objeto
+    
+    ESP_LOGI(TAG, "🎭 SIMULANDO %s - Cambiando estado simulado a %d", 
+             simulate_detection ? "DETECCIÓN DE OBJETO" : "RETIRO DE OBJETO",
+             simulated_pin_state);
+    
+    // Simular evento enviando el GPIO a la cola
+    uint32_t gpio_num = current_config.pin;
+    BaseType_t result = xQueueSend(sensor_event_queue, &gpio_num, pdMS_TO_TICKS(100));
+    
+    if (result != pdTRUE) {
+        ESP_LOGE(TAG, "Error enviando evento simulado a la cola");
+        return ESP_ERR_TIMEOUT;
+    }
+    
+    ESP_LOGI(TAG, "✅ Evento simulado enviado correctamente");
     return ESP_OK;
 }
