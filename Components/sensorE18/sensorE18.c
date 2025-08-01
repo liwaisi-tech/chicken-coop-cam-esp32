@@ -43,10 +43,10 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 
 // Callback del timer para fotos periódicas
 static void periodic_photo_callback(void* arg) {
-    // Solo tomar foto si el objeto sigue detectado (usar estado simulado)
-    int sensor_state = simulated_pin_state;
+    // Solo tomar foto si el objeto sigue detectado (leer pin real)
+    int sensor_state = gpio_get_level(current_config.pin);
     
-    // Lógica corregida: 0 = objeto detectado
+    // Lógica: 0 = objeto detectado
     if (sensor_state == 0 && sensor_stats.object_detected) {
         ESP_LOGI(TAG, "📸 Foto periódica - objeto permanece presente");
         camera_manager_take_photo("objeto permanece presente");
@@ -115,12 +115,10 @@ static void sensor_detection_task(void *pvParameter) {
             // Debouncing
             vTaskDelay(pdMS_TO_TICKS(DEBOUNCE_TIME_MS));
             
-            // Usar estado simulado en lugar del GPIO real para pruebas
-            int sensor_state = simulated_pin_state;
-            int gpio_raw = gpio_get_level(current_config.pin);
+            // Leer estado real del pin GPIO
+            int sensor_state = gpio_get_level(current_config.pin);
             
-            ESP_LOGI(TAG, "📡 Estado GPIO real: %d | Estado simulado: %d (0=objeto, 1=sin objeto)", 
-                     gpio_raw, sensor_state);
+            ESP_LOGI(TAG, "📡 Estado GPIO: %d (0=objeto detectado, 1=sin objeto)", sensor_state);
             
             // Lógica corregida: 0 = objeto detectado, 1 = sin objeto
             if (sensor_state == 0) {
@@ -259,8 +257,8 @@ sensor_statistics_t sensor_e18_get_statistics(void) {
 }
 
 int sensor_e18_read_state(void) {
-    // Devolver estado simulado para pruebas
-    return simulated_pin_state;
+    // Leer estado del pin GPIO
+    return gpio_get_level(current_config.pin);
 }
 
 sensor_e18_config_t sensor_e18_get_config(void) {

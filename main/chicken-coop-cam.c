@@ -90,31 +90,28 @@ void app_main(void) {
     // Esperar 5 segundos para que todo se estabilice
     vTaskDelay(pdMS_TO_TICKS(5000));
     
-    // FASE DE PRUEBAS: Simular detecciones para validar el sistema
-    ESP_LOGI(TAG, "🧪 INICIANDO FASE DE PRUEBAS CON SIMULACIONES");
+    ESP_LOGI(TAG, "🎯 SISTEMA LISTO - Iniciando monitoreo en tiempo real");
     
-    // Simular detección de objeto
-    ESP_LOGI(TAG, "🧪 Test 1: Simulando detección de objeto...");
-    sensor_e18_simulate_detection(true);
-    vTaskDelay(pdMS_TO_TICKS(3000)); // Esperar 3 segundos
+    // Bucle principal - monitoreo en tiempo real del sistema
+    ESP_LOGI(TAG, "📡 Monitoreo activo - El sistema responderá automáticamente a detecciones");
     
-    // Simular retiro de objeto
-    ESP_LOGI(TAG, "🧪 Test 2: Simulando retiro de objeto...");
-    sensor_e18_simulate_detection(false);
-    vTaskDelay(pdMS_TO_TICKS(3000)); // Esperar 3 segundos
-    
-    ESP_LOGI(TAG, "🧪 FASE DE PRUEBAS COMPLETADA - Iniciando monitoreo normal");
-    
-    // Bucle principal - monitoreo con lecturas periódicas del sensor
     while(1) {
         sensor_statistics_t stats = sensor_e18_get_statistics();
         int current_sensor_state = sensor_e18_read_state();
+        camera_info_t camera_info = camera_manager_get_info();
         
-        ESP_LOGI(TAG, "📊 Estado: Detecciones=%lu | Activo=%s | Fotos=%lu | Pin=%d", 
+        // Log de estado del sistema cada 30 segundos (menos frecuente en producción)
+        ESP_LOGI(TAG, "📊 Sistema operativo - Detecciones: %lu | Estado: %s | Fotos: %lu | GPIO: %d", 
                 stats.detection_count, 
-                stats.object_detected ? "SÍ" : "NO",
-                camera_manager_get_photo_count(),
+                stats.object_detected ? "OBJETO PRESENTE" : "ÁREA LIBRE",
+                camera_info.photo_count,
                 current_sensor_state);
-        vTaskDelay(pdMS_TO_TICKS(10000)); // Log cada 10 segundos
+        
+        // Verificar estado de salud del sistema
+        if (!camera_info.initialized) {
+            ESP_LOGW(TAG, "⚠️  Cámara no inicializada - Verificar conexión");
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(30000)); // Log cada 30 segundos en producción
     }
 }

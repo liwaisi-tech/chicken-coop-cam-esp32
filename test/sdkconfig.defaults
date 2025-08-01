@@ -1,0 +1,14 @@
+# Test configuration defaults
+CONFIG_UNITY_ENABLE_FLOAT=y
+CONFIG_UNITY_ENABLE_DOUBLE=y
+CONFIG_FREERTOS_HZ=1000
+
+# Camera configuration for tests
+CONFIG_ESP32_CAMERA_TASK_STACK_SIZE=8192
+CONFIG_ESP32_CAMERA_TASK_PRIORITY=5
+
+# WiFi disabled for unit tests
+CONFIG_ESP_WIFI_ENABLED=n
+
+# Logging level for tests
+CONFIG_LOG_DEFAULT_LEVEL_DEBUG=y
