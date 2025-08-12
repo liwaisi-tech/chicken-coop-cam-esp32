@@ -107,148 +107,118 @@ The project includes proper ESP-IDF unit tests in the `test/` directory:
 ### System Requirements
 This system extends the current ESP32-CAM functionality to include:
 - Motion detection with E18-D80NK sensor (1 second confirmation)
-- Automatic photo upload to Google Drive
-- WhatsApp notifications via CallMeBot
+- WhatsApp notifications via CallMeBot with web server URL
 - 10-second cooldown between photos
-- HD JPEG image quality maintained
+- HD JPEG image quality maintained (via existing web server)
 - GMT-5 timezone support
+- Direct access to photos through existing web interface
 
-### 🔄 FLUJO DE EJECUCIÓN DETALLADO
+### 🔄 FLUJO DE EJECUCIÓN SIMPLIFICADO
 
 1. **Detección** → Sensor E18 detecta movimiento
 2. **Confirmación** → Espera 1s y re-verifica presencia  
 3. **Cooldown Check** → Si no han pasado 10s desde última foto, ignora
-4. **Estado Check** → Si ya está procesando otra foto, ignora
-5. **Alerta Inmediata** → CallMeBot: "🚨 Movimiento detectado en gallinero 15/01/2024 2:30 PM - Imagen cargando..."
-6. **Captura** → ESP32-CAM toma foto HD JPEG
-7. **Upload** → Google Drive con 3 reintentos
-8. **Confirmación** → CallMeBot: "📸 Imagen lista: https://drive.google.com/file/d/XXXXXX"
-9. **Error Recovery** → Si falla upload después de 3 intentos: CallMeBot: "❌ Error cargando imagen 15/01/2024 2:30 PM"
+4. **Captura** → ESP32-CAM toma foto HD JPEG (usa código existente cam_reader)
+5. **WhatsApp Alert** → CallMeBot: "🚨 Movimiento detectado en gallinero 📅 15/01/2024 2:30 PM 🌐 Ver imagen: http://192.168.1.100/photo"
+6. **Usuario** → Abre URL y ve la foto directamente en el navegador web del ESP32
 
-### ESPECIFICACIÓN DETALLADA DE NUEVOS COMPONENTES
+### ESPECIFICACIÓN DETALLADA DE NUEVOS COMPONENTES (SIMPLIFICADO)
 
 #### 📦 Componente: `ntp_time`
 ```c
 // include/ntp_time.h
 esp_err_t ntp_time_init(void);
 char* ntp_get_formatted_time(void);     // "15/01/2024 2:30 PM"
-char* ntp_get_filename_time(void);      // "15-01-2024_14-30-25"
-char* ntp_get_folder_date(void);        // "2024-ENE"
-```
-
-#### 📦 Componente: `google_drive_client`
-```c
-// include/google_drive_client.h
-typedef struct {
-    bool upload_success;
-    char file_url[512];
-    char error_message[256];
-} gdrive_upload_result_t;
-
-esp_err_t gdrive_init(void);
-gdrive_upload_result_t gdrive_upload_photo(uint8_t* jpeg_data, size_t jpeg_size, const char* filename);
-esp_err_t gdrive_cleanup_old_files(void);  // Limpieza mensual
 ```
 
 #### 📦 Componente: `callmebot_client`  
 ```c
 // include/callmebot_client.h
 esp_err_t callmebot_init(void);
-esp_err_t callmebot_send_alert(const char* timestamp);           // Mensaje inmediato
-esp_err_t callmebot_send_photo_url(const char* url);            // Segundo mensaje
-esp_err_t callmebot_send_upload_failed(const char* timestamp);   // Error upload
+esp_err_t callmebot_send_detection_alert(const char* timestamp, const char* server_url);
+
+// Ejemplo de mensaje completo:
+// "🚨 Movimiento detectado en gallinero
+//  📅 15/01/2024 2:30 PM  
+//  🌐 Ver imagen: http://192.168.1.100/photo"
 ```
 
-#### 📦 Componente: `system_coordinator`
+#### 🔧 Modificación: `main/chicken-coop-cam.c` - Integración simplificada
 ```c
-// include/system_coordinator.h
-typedef enum {
-    SYSTEM_IDLE,
-    SYSTEM_DETECTING,
-    SYSTEM_CAPTURING, 
-    SYSTEM_UPLOADING
-} system_state_t;
-
-esp_err_t system_coordinator_init(void);
-void system_coordinator_handle_detection(void);   // Callback desde sensor
-system_state_t system_coordinator_get_state(void);
-```
-
-### MODIFICACIONES A COMPONENTES EXISTENTES
-
-#### 🔧 `sensorE18` - Modificaciones:
-- **Nuevo callback**: Integración con `system_coordinator`
-- **Lógica de confirmación**: Detectar → delay 1s → re-verificar antes de activar
-- **Anti-spam**: Respetar cooldown de 10 segundos
-
-#### 🔧 `web_server` - Nuevos endpoints:
-```c
-// Nuevos campos en el estado del servidor
-typedef struct {
-    uint32_t detections_today;
-    char last_photo_sent[64];      // "15/01/2024 2:30 PM" 
-    bool sd_card_ok;
-    bool sd_card_full;
-    system_state_t current_state;
-} server_status_t;
-```
-
-#### 🔧 `main/chicken-coop-cam.c` - Nueva integración:
-```c
-// Nueva secuencia de inicialización
-void app_main(void) {
-    // ... inicialización actual ...
+// Callback desde sensorE18 cuando detecta movimiento:
+void on_motion_detected(void) {
+    if (cooldown_active()) return;  // 10s cooldown
     
-    // NUEVOS COMPONENTES
-    ntp_time_init();
-    gdrive_init(); 
-    callmebot_init();
-    system_coordinator_init();    // ← Orquestador principal
+    // Tomar foto (código existente)
+    cam_reader_capture_photo();
+    
+    // Enviar WhatsApp con URL local
+    char* timestamp = ntp_get_formatted_time();
+    char server_url[64];
+    sprintf(server_url, "http://%s/photo", wifi_get_local_ip());
+    callmebot_send_detection_alert(timestamp, server_url);
+    
+    set_cooldown_timer(10000);  // 10 segundos
+}
+```
+
+### MODIFICACIONES A COMPONENTES EXISTENTES (SIMPLIFICADO)
+
+#### 🔧 `sensorE18` - Modificaciones mínimas:
+- **Nuevo callback**: `on_motion_detected()` definido en main
+- **Lógica de confirmación**: Detectar → delay 1s → re-verificar antes de activar
+- **Integración**: Solo necesita llamar al callback
+
+#### 🔧 `web_server` - Sin cambios necesarios:
+- **Endpoint `/photo`** → Ya existe y funciona
+- **Endpoint `/status`** → añadir contador de detecciones
+- **Componente actual** → Se mantiene igual
+
+#### 🔧 `main/chicken-coop-cam.c` - Inicialización simplificada:
+```c
+void app_main(void) {
+    // ... inicialización actual (cam_reader, sensorE18, web_server, wifi) ...
+    
+    // NUEVOS COMPONENTES (solo 2)
+    ntp_time_init();      // Para timestamps  
+    callmebot_init();     // Para WhatsApp
+    
+    // Configurar callback del sensor
+    sensor_e18_set_callback(on_motion_detected);
     
     // ... resto igual ...
 }
 ```
 
-### ⚡ RECOMENDACIONES DE IMPLEMENTACIÓN
+### ⚡ RECOMENDACIONES DE IMPLEMENTACIÓN (SIMPLIFICADO)
 
 **Prioridad 1 (Crítico):**
-- `ntp_time`: Fundamental para timestamps
-- `system_coordinator`: Orquestador principal del flujo
-- Modificar `sensorE18` con lógica de confirmación
-
-**Prioridad 2 (Funcional):**
+- `ntp_time`: Timestamps para WhatsApp
 - `callmebot_client`: Notificaciones WhatsApp
-- `google_drive_client`: Upload de imágenes
-- Modificar `web_server` con nuevos endpoints
+- Modificar `sensorE18` con callback. cooldown de  10 seg y confirmación con dectección continua de 3 seg
 
-**Consideraciones Técnicas:**
-- **Memoria**: Usar heap dinámico para buffers de imagen temporales
-- **Concurrencia**: FreeRTOS queues para comunicación entre componentes
-- **Robustez**: Watchdog timers para recovery automático
-- **Testing**: Modo simulación en `sensorE18` para pruebas sin hardware
+**Prioridad 2 (Opcional):**
+- Contador de detecciones en `/status`
+- Logs de actividad
 
-**Estimación de Desarrollo:** 
-- Setup configuración externa: 2-3 horas
-- Desarrollo componentes nuevos: 8-10 horas  
-- Integración y testing: 4-6 horas
-- **Total**: ~15 horas de desarrollo
+**Consideraciones Técnicas Simplificadas:**
+- **Reutilización**: Aprovechar código existente de cam_reader y web_server
+- **Memoria**: Sin cambios, usa la misma gestión actual
+- **Concurrencia**: Callback simple desde sensor, sin queues complejas
+- **Testing**: Usar modo simulación existente en sensorE18
 
-### Configuration Requirements
+**Estimación de Desarrollo Reducida:** 
+- Setup CallMeBot: 30 minutos
+- Componente `ntp_time`: 1-2 horas
+- Componente `callmebot_client`: 2-3 horas  
+- Integración y testing: 1-2 horas
+- **Total**: ~4-6 horas de desarrollo (vs 15 horas originales)
 
-**Google Cloud Setup:**
-```bash
-# Pasos necesarios ANTES de programar:
-1. Ir a console.cloud.google.com
-2. Crear nuevo proyecto: "ESP32-Gallinero"  
-3. Habilitar Google Drive API
-4. Crear Service Account: "esp32-gallinero-sa"
-5. Generar clave JSON y guardar como "credentials.json"
-6. Compartir carpeta Drive con email del Service Account
-```
+### Configuration Requirements (SIMPLIFICADO)
 
 **CallMeBot WhatsApp Setup:**
 ```bash
-# Configuración CallMeBot:
+# Configuración CallMeBot (única configuración externa necesaria):
 1. Agregar contacto: +34 644 59 71 67
 2. Enviar WhatsApp: "I allow callmebot to send me messages"
 3. Guardar API Key recibida
@@ -257,16 +227,26 @@ void app_main(void) {
 
 **ESP-IDF Configuration:**
 ```bash
-# Agregar a sdkconfig o menuconfig:
-CONFIG_GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL="esp32-gallinero-sa@esp32-gallinero.iam.gserviceaccount.com"
-CONFIG_CALLMEBOT_PHONE_NUMBER="+57XXXXXXXXX" 
+# Configuración super simplificada en sdkconfig:
+CONFIG_CALLMEBOT_PHONE_NUMBER="+57XXXXXXXXX"
 CONFIG_CALLMEBOT_API_KEY="XXXXXX"
 CONFIG_NTP_SERVER="pool.ntp.org"
 CONFIG_TIMEZONE="GMT-5"
+# Todo lo demás usa la configuración WiFi existente
 ```
 
-### Directory Structure
-Google Drive folder organization:
-- `monitoreoESP32CAM/Gallinero/2024-ENE/gallinero_15-01-2024_14-30-25.jpg`
-- Automatic monthly cleanup
-- No local photo storage (RAM only during processing)
+### Sistema de Acceso Directo (SIN UPLOADS EXTERNOS)
+
+**Acceso a fotos:**
+- **URL Local**: `http://192.168.1.100/photo` (servidor web existente)
+- **Sin almacenamiento externo**: Solo RAM durante captura
+- **Acceso inmediato**: Usuario ve foto directamente en navegador
+- **Simplicidad máxima**: Reutiliza infraestructura existente
+
+### Ventajas del Diseño Simplificado:
+- **Sin configuración compleja**: Solo CallMeBot + NTP
+- **Sin APIs externas**: No Cloudinary, no Google Drive, no OAuth2
+- **Reutiliza código existente**: cam_reader + web_server ya funcionan
+- **Menor latencia**: Acceso directo sin uploads
+- **Más confiable**: Menos puntos de falla externos
+- **Desarrollo rápido**: ~4-6 horas vs 15 horas originales
