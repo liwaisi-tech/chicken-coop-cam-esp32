@@ -3,15 +3,49 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "nvs_flash.h"
 #include "sensorE18.h"
 #include "cam_reader.h"
 #include "web_server.h"
-
-// Declaración externa de la función WiFi
-extern esp_err_t wifi_init_sta(void);
+#include "ntp_time.h"
+#include "callmebot_client.h"
+#include "wifi.h"
 
 static const char *TAG = "MAIN_SYSTEM";
+
+// Variables para cooldown de WhatsApp (10 segundos)
+static int64_t last_whatsapp_time = 0;
+#define WHATSAPP_COOLDOWN_MS 10000
+
+// Callback para detección confirmada de movimiento
+static void on_motion_detected(void) {
+    int64_t current_time = esp_timer_get_time() / 1000; // Convertir a ms
+    
+    // Verificar cooldown de 10 segundos
+    if (current_time - last_whatsapp_time < WHATSAPP_COOLDOWN_MS) {
+        ESP_LOGI(TAG, "⏱️ WhatsApp en cooldown, ignorando detección");
+        return;
+    }
+    
+    ESP_LOGI(TAG, "📱 Enviando alerta WhatsApp...");
+    
+    // Obtener timestamp y URL del servidor
+    char* timestamp = ntp_get_formatted_time();
+    char* local_ip = wifi_get_local_ip();
+    
+    char server_url[64];
+    snprintf(server_url, sizeof(server_url), "http://%s/photo", local_ip);
+    
+    // Enviar notificación WhatsApp
+    esp_err_t result = callmebot_send_detection_alert(timestamp, server_url);
+    if (result == ESP_OK) {
+        ESP_LOGI(TAG, "✅ WhatsApp enviado exitosamente");
+        last_whatsapp_time = current_time;
+    } else {
+        ESP_LOGE(TAG, "❌ Error enviando WhatsApp: %s", esp_err_to_name(result));
+    }
+}
 
 void app_main(void) {
     ESP_LOGI(TAG, "=== INICIANDO SISTEMA INTEGRADO SENSOR + CÁMARA ===");
@@ -49,6 +83,22 @@ void app_main(void) {
     }
     ESP_LOGI(TAG, "✅ WiFi conectado");
     
+    // 3.1. Inicializar NTP para timestamps
+    ESP_LOGI(TAG, "Sincronizando tiempo NTP...");
+    if (ntp_time_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Error inicializando NTP");
+        return;
+    }
+    ESP_LOGI(TAG, "✅ NTP sincronizado");
+    
+    // 3.2. Inicializar cliente CallMeBot
+    ESP_LOGI(TAG, "Inicializando cliente WhatsApp...");
+    if (callmebot_init() != ESP_OK) {
+        ESP_LOGE(TAG, "Error inicializando CallMeBot");
+        return;
+    }
+    ESP_LOGI(TAG, "✅ Cliente WhatsApp inicializado");
+    
     // 4. Inicializar sensor E18-D80NK
     ESP_LOGI(TAG, "Inicializando sensor E18-D80NK...");
     if (sensor_e18_init() != ESP_OK) {
@@ -60,6 +110,14 @@ void app_main(void) {
     // Test del sensor para diagnóstico
     ESP_LOGI(TAG, "Ejecutando test del sensor...");
     sensor_e18_test();
+    
+    // Configurar callback para detecciones confirmadas
+    ESP_LOGI(TAG, "Configurando callback de WhatsApp...");
+    if (sensor_e18_set_callback(on_motion_detected) != ESP_OK) {
+        ESP_LOGE(TAG, "Error configurando callback");
+        return;
+    }
+    ESP_LOGI(TAG, "✅ Callback WhatsApp configurado");
     
     // 5. Inicializar servidor web
     ESP_LOGI(TAG, "Iniciando servidor web...");

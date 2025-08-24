@@ -68,6 +68,7 @@ static EventGroupHandle_t s_wifi_event_group;
 static const char *TAG = "wifi station";
 
 static int s_retry_num = 0;
+static char local_ip_str[16] = {0};
 
 
 static void event_handler(void* arg, esp_event_base_t event_base,
@@ -86,6 +87,7 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t* event = (ip_event_got_ip_t*) event_data;
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
+        snprintf(local_ip_str, sizeof(local_ip_str), IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -157,4 +159,8 @@ esp_err_t wifi_init_sta(void) {
         ESP_LOGE(TAG, "UNEXPECTED EVENT");
         return ESP_ERR_WIFI_CONN;
     }
+}
+
+char* wifi_get_local_ip(void) {
+    return local_ip_str;
 }

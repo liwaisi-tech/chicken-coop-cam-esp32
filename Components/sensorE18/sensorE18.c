@@ -21,6 +21,7 @@ static sensor_e18_config_t current_config = SENSOR_E18_DEFAULT_CONFIG;
 static sensor_statistics_t sensor_stats = {0};
 static esp_timer_handle_t periodic_photo_timer = NULL;
 static int simulated_pin_state = 1; // Variable para simular estado del pin (1=sin objeto, 0=objeto)
+static motion_detected_callback_t motion_callback = NULL;
 
 // Prototipos de funciones privadas
 static esp_err_t send_server_event(server_event_type_t type, const char* reason);
@@ -124,33 +125,49 @@ static void sensor_detection_task(void *pvParameter) {
             if (sensor_state == 0) {
                 // OBJETO DETECTADO
                 if (!sensor_stats.object_detected) {
-                    // Primera detección
-                    sensor_stats.object_detected = true;
-                    sensor_stats.detection_count++;
-                    sensor_stats.last_detection_time = esp_timer_get_time();
+                    ESP_LOGI(TAG, "🔍 Objeto detectado, esperando 1s para confirmación...");
                     
-                    ESP_LOGI(TAG, "✅ NUEVO OBJETO DETECTADO #%" PRIu32, sensor_stats.detection_count);
+                    // Esperar 1 segundo para confirmación
+                    vTaskDelay(pdMS_TO_TICKS(1000));
                     
-                    // Enviar evento al servidor
-                    send_server_event(SERVER_EVENT_DETECTION_STARTED, NULL);
-                    
-                    // Tomar foto inmediata
-                    camera_manager_take_photo("detección inicial");
-                    
-                    // Notificar foto al servidor
-                    send_server_event(SERVER_EVENT_PHOTO_TAKEN, "detección inicial");
-                    
-                    // Iniciar timer para fotos periódicas
-                    if (periodic_photo_timer == NULL) {
-                        esp_timer_create_args_t timer_args = {
-                            .callback = periodic_photo_callback,
-                            .name = "periodic_photo_timer"
-                        };
-                        ESP_ERROR_CHECK(esp_timer_create(&timer_args, &periodic_photo_timer));
+                    // Re-verificar después de 1 segundo
+                    int confirmed_state = gpio_get_level(current_config.pin);
+                    if (confirmed_state == 0) {
+                        // Confirmado: objeto sigue presente después de 1s
+                        sensor_stats.object_detected = true;
+                        sensor_stats.detection_count++;
+                        sensor_stats.last_detection_time = esp_timer_get_time();
+                        
+                        ESP_LOGI(TAG, "✅ MOVIMIENTO CONFIRMADO #%" PRIu32, sensor_stats.detection_count);
+                        
+                        // Llamar callback si está configurado (para WhatsApp)
+                        if (motion_callback != NULL) {
+                            motion_callback();
+                        }
+                        
+                        // Enviar evento al servidor
+                        send_server_event(SERVER_EVENT_DETECTION_STARTED, NULL);
+                        
+                        // Tomar foto inmediata
+                        camera_manager_take_photo("detección inicial");
+                        
+                        // Notificar foto al servidor
+                        send_server_event(SERVER_EVENT_PHOTO_TAKEN, "detección inicial");
+                        
+                        // Iniciar timer para fotos periódicas
+                        if (periodic_photo_timer == NULL) {
+                            esp_timer_create_args_t timer_args = {
+                                .callback = periodic_photo_callback,
+                                .name = "periodic_photo_timer"
+                            };
+                            ESP_ERROR_CHECK(esp_timer_create(&timer_args, &periodic_photo_timer));
+                        }
+                        
+                        ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_photo_timer, PERIODIC_PHOTO_INTERVAL_US));
+                        ESP_LOGI(TAG, "⏰ Timer de fotos periódicas iniciado");
+                    } else {
+                        ESP_LOGI(TAG, "❌ Falsa alarma - objeto no confirmado tras 1s");
                     }
-                    
-                    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_photo_timer, PERIODIC_PHOTO_INTERVAL_US));
-                    ESP_LOGI(TAG, "⏰ Timer de fotos periódicas iniciado");
                 }
                 
             } else {
@@ -209,15 +226,7 @@ esp_err_t sensor_e18_init_with_config(const sensor_e18_config_t *config) {
     
     ESP_ERROR_CHECK(gpio_config(&io_conf));
     
-    // Instalar servicio de interrupciones
-    esp_err_t isr_result = gpio_install_isr_service(0);
-    if (isr_result == ESP_ERR_INVALID_STATE) {
-        ESP_LOGI(TAG, "Servicio ISR ya instalado");
-    } else {
-        ESP_ERROR_CHECK(isr_result);
-    }
-    
-    // Registrar handler de interrupción
+    // Registrar handler de interrupción (servicio ISR ya instalado por cam_reader)
     ESP_ERROR_CHECK(gpio_isr_handler_add(current_config.pin, gpio_isr_handler, (void*) current_config.pin));
     
     // Test inicial del sensor con debug extendido
@@ -335,5 +344,11 @@ esp_err_t sensor_e18_simulate_detection(bool simulate_detection) {
     }
     
     ESP_LOGI(TAG, "✅ Evento simulado enviado correctamente");
+    return ESP_OK;
+}
+
+esp_err_t sensor_e18_set_callback(motion_detected_callback_t callback) {
+    motion_callback = callback;
+    ESP_LOGI(TAG, "Callback de detección configurado: %s", callback ? "SÍ" : "NO");
     return ESP_OK;
 }

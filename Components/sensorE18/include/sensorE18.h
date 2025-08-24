@@ -90,6 +90,18 @@ esp_err_t sensor_e18_test(void);
  */
 esp_err_t sensor_e18_simulate_detection(bool simulate_detection);
 
+/**
+ * @brief Definir tipo de callback para detección confirmada
+ */
+typedef void (*motion_detected_callback_t)(void);
+
+/**
+ * @brief Configurar callback para cuando se confirma detección
+ * @param callback Función a llamar cuando se detecta movimiento confirmado
+ * @return ESP_OK si exitoso
+ */
+esp_err_t sensor_e18_set_callback(motion_detected_callback_t callback);
+
 #ifdef __cplusplus
 }
 #endif
