@@ -235,6 +235,28 @@ CONFIG_TIMEZONE="GMT-5"
 # Todo lo demás usa la configuración WiFi existente
 ```
 
+## PSRAM Configuration (CRÍTICO)
+
+**IMPORTANTE:** Este proyecto requiere una configuración específica de PSRAM para funcionar correctamente.
+
+### Problema común:
+- ESP32-CAM con 4MB PSRAM causa congelamiento durante inicialización
+- Error típico: "Virtual address not enough for PSRAM, map as much as we can. 4MB is mapped"
+- Sistema se congela después de este mensaje
+
+### Solución implementada:
+El archivo `sdkconfig` está configurado con:
+```bash
+CONFIG_SPIRAM_SIZE=2097152  # Limita PSRAM a 2MB (no 4MB completos)
+CONFIG_SPIRAM_USE_CAPS_ALLOC=y  # Usa heap_caps_malloc (más seguro)
+CONFIG_SPIRAM_CACHE_WORKAROUND=y  # Workaround para Rev1 ESP32s
+```
+
+### Si tienes problemas de PSRAM:
+1. Usa el `sdkconfig` incluido en el repositorio (no crear uno nuevo)
+2. Si el sistema se congela en inicialización PSRAM, el módulo puede tener PSRAM defectuoso
+3. Como backup, puedes deshabilitar PSRAM y usar resolución de cámara muy baja (QQVGA)
+
 ### Sistema de Acceso Directo (SIN UPLOADS EXTERNOS)
 
 **Acceso a fotos:**

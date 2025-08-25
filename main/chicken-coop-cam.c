@@ -107,9 +107,6 @@ void app_main(void) {
     }
     ESP_LOGI(TAG, "✅ Sensor inicializado");
     
-    // Test del sensor para diagnóstico
-    ESP_LOGI(TAG, "Ejecutando test del sensor...");
-    sensor_e18_test();
     
     // Configurar callback para detecciones confirmadas
     ESP_LOGI(TAG, "Configurando callback de WhatsApp...");
@@ -134,6 +131,14 @@ void app_main(void) {
     }
     ESP_LOGI(TAG, "✅ Servidor web andando");
     
+    // Conectar cola de eventos del sensor al servidor web
+    QueueHandle_t web_queue = web_server_get_event_queue();
+    if (sensor_e18_set_server_queue(web_queue) != ESP_OK) {
+        ESP_LOGE(TAG, "Error conectando sensor al servidor web");
+        return;
+    }
+    ESP_LOGI(TAG, "✅ Sensor conectado al servidor web");
+    
     // 6. Iniciar la lógica de integración sensor-cámara
     ESP_LOGI(TAG, "Iniciando lógica de integración...");
     if (sensor_e18_start_detection_task() != ESP_OK) {
@@ -147,7 +152,7 @@ void app_main(void) {
     
     // Esperar 5 segundos para que todo se estabilice
     vTaskDelay(pdMS_TO_TICKS(5000));
-    
+ 
     ESP_LOGI(TAG, "🎯 SISTEMA LISTO - Iniciando monitoreo en tiempo real");
     
     // Bucle principal - monitoreo en tiempo real del sistema
@@ -159,7 +164,7 @@ void app_main(void) {
         camera_info_t camera_info = camera_manager_get_info();
         
         // Log de estado del sistema cada 30 segundos (menos frecuente en producción)
-        ESP_LOGI(TAG, "📊 Sistema operativo - Detecciones: %lu | Estado: %s | Fotos: %lu | GPIO: %d", 
+        ESP_LOGI(TAG, "📊 Sistema operativo - Detecciones: %lu | Estado: %s | Fotos: %lu | GPIO State: %d", 
                 stats.detection_count, 
                 stats.object_detected ? "OBJETO PRESENTE" : "ÁREA LIBRE",
                 camera_info.photo_count,

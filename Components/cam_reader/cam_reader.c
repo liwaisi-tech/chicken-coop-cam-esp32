@@ -367,14 +367,14 @@ esp_err_t camera_manager_optimize_for_daylight(void) {
     
     ESP_LOGI(TAG, "☀️ Optimizando cámara para condiciones DIURNAS...");
     
-    // Configuración balanceada para luz del día
-    s->set_brightness(s, 0);        // Brillo normal
-    s->set_contrast(s, 1);          // Contraste moderado
-    s->set_saturation(s, 0);        // Saturación normal
-    s->set_ae_level(s, 0);          // Exposición normal
-    s->set_aec_value(s, 300);       // Tiempo de exposición normal
-    s->set_agc_gain(s, 5);          // Ganancia ISO baja
-    s->set_gainceiling(s, (gainceiling_t)2); // Techo ganancia normal (8x)
+    // Configuración CONSERVADORA para luz del día (evitar sobre-exposición)
+    s->set_brightness(s, -8);       // Brillo reducido para evitar saturación
+    s->set_contrast(s, -10);          // Contraste normal
+    s->set_saturation(s, -1);       // Saturación reducida para colores naturales
+    s->set_ae_level(s, -10);         // Exposición REDUCIDA para evitar quemado
+    s->set_aec_value(s, 150);       // Tiempo de exposición MÁS CORTO
+    s->set_agc_gain(s, 2);          // Ganancia ISO MÁS BAJA
+    s->set_gainceiling(s, (gainceiling_t)1); // Techo ganancia BAJO (4x)
     s->set_aec2(s, 0);              // AEC2 deshabilitado
     s->set_raw_gma(s, 1);           // Gamma RAW habilitado
     s->set_lenc(s, 1);              // Corrección de lente habilitada

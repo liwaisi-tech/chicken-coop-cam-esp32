@@ -2,7 +2,7 @@
 build/
 Kconfig.projbuild
 # ESP-IDF configuration files
-sdkconfig
+# sdkconfig - now tracked for PSRAM configuration
 sdkconfig.old
 *.cmake
 # ESP-IDF generated files

@@ -77,11 +77,6 @@ sensor_e18_config_t sensor_e18_get_config(void);
  */
 esp_err_t sensor_e18_deinit(void);
 
-/**
- * @brief Test del sensor - lee estado actual y muestra logs
- * @return ESP_OK si exitoso
- */
-esp_err_t sensor_e18_test(void);
 
 /**
  * @brief Simular detección de objeto para pruebas

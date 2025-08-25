@@ -383,7 +383,7 @@ static esp_err_t photo_handler(httpd_req_t *req) {
 static esp_err_t status_handler(httpd_req_t *req) {
     server_state_t state = web_server_get_state();
     
-    char status_json[256];
+    char status_json[1024];
     snprintf(status_json, sizeof(status_json),
         "{"
         "\"total_detections\":%lu,"

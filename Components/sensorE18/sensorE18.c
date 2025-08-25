@@ -300,26 +300,6 @@ esp_err_t sensor_e18_deinit(void) {
     return ESP_OK;
 }
 
-esp_err_t sensor_e18_test(void) {
-    ESP_LOGI(TAG, "=== TEST DEL SENSOR E18-D80NK ===");
-    ESP_LOGI(TAG, "Pin configurado: GPIO %d", current_config.pin);
-    
-    // Leer estado actual
-    int current_state = gpio_get_level(current_config.pin);
-    ESP_LOGI(TAG, "Estado actual del sensor: %d", current_state);
-    ESP_LOGI(TAG, "Interpretación: %s", current_state == 0 ? "OBJETO DETECTADO" : "SIN OBJETO");
-    
-    // Mostrar estadísticas
-    ESP_LOGI(TAG, "Estadísticas actuales:");
-    ESP_LOGI(TAG, "  - Detecciones totales: %lu", sensor_stats.detection_count);
-    ESP_LOGI(TAG, "  - Objeto detectado: %s", sensor_stats.object_detected ? "SÍ" : "NO");
-    
-    // Test de interrupción
-    ESP_LOGI(TAG, "Cola de eventos: %s", sensor_event_queue ? "Creada" : "No creada");
-    
-    ESP_LOGI(TAG, "=== FIN DEL TEST ===");
-    return ESP_OK;
-}
 
 esp_err_t sensor_e18_simulate_detection(bool simulate_detection) {
     if (sensor_event_queue == NULL) {
